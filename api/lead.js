@@ -14,27 +14,29 @@ function requireEnv(name) {
   return value;
 }
 
-function formatText(value) {
+function cleanText(value) {
   if (value === null || value === undefined) return '';
   return String(value).trim();
 }
 
-function formatNumber(value) {
-  if (value === null || value === undefined || value === '') return '';
+function cleanNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
   const num = Number(value);
-  return Number.isFinite(num) ? num : '';
+  return Number.isFinite(num) ? num : null;
 }
 
 function addIfPresent(obj, key, value) {
-  if (!key) return;
-  if (value === '' || value === null || value === undefined) return;
+  if (value === null || value === undefined || value === '') return;
   obj[key] = value;
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
-    return res.status(405).json({ success: false, error: 'Method not allowed' });
+    return res.status(405).json({
+      success: false,
+      error: 'Method not allowed',
+    });
   }
 
   try {
@@ -47,57 +49,61 @@ export default async function handler(req, res) {
 
     const payload = req.body || {};
 
-    // This matches your CURRENT index.html payload structure
-    const firstName = formatText(payload.firstName);
-    const lastName = formatText(payload.lastName);
-    const email = formatText(payload.email);
-    const company = formatText(payload.company);
-    const title = formatText(payload.title);
-    const website = formatText(payload.companyWebsite);
-    const teamName = formatText(payload.workgroupName);
-    const startDate = formatText(payload.startDate);
-    const endDate = formatText(payload.endDate);
-    const currentTeamSize = formatNumber(payload.currentTeamSize);
-    const avgHeadcount = formatNumber(payload.avgHeadcount);
-    const turnoverRate = formatText(payload.turnoverRate);
-    const retentionRate = formatText(payload.retentionRate);
-    const attractCost = formatNumber(payload.attractCost);
-    const assessCost = formatNumber(payload.assessCost);
-    const addCost = formatNumber(payload.addCost);
-    const impactCost = formatNumber(payload.impactCost);
-    const totalCost = formatNumber(payload.totalCost);
+    // Matches your CURRENT index.html payload
+    const firstName = cleanText(payload.firstName);
+    const lastName = cleanText(payload.lastName);
+    const email = cleanText(payload.email);
+    const company = cleanText(payload.company);
+    const title = cleanText(payload.title);
+    const companyWebsite = cleanText(payload.companyWebsite);
+    const workgroupName = cleanText(payload.workgroupName);
+
+    const startDate = cleanText(payload.startDate);
+    const endDate = cleanText(payload.endDate);
+
+    const currentTeamSize = cleanNumber(payload.currentTeamSize);
+    const avgHeadcount = cleanNumber(payload.avgHeadcount);
+    const turnoverRate = cleanNumber(payload.turnoverRate);
+    const retentionRate = cleanNumber(payload.retentionRate);
+
+    const attractCost = cleanNumber(payload.attractCost);
+    const assessCost = cleanNumber(payload.assessCost);
+    const addCost = cleanNumber(payload.addCost);
+    const impactCost = cleanNumber(payload.impactCost);
+    const totalCost = cleanNumber(payload.totalCost);
 
     const itemName =
       `${firstName} ${lastName}`.trim() ||
       company ||
+      email ||
       'Bad Hire Calculator Submission';
 
+    // Hardcoded to the REAL Monday column IDs you provided
     const columnValues = {};
 
-    // These only get added if the env var exists
-    addIfPresent(columnValues, process.env.MONDAY_COL_EMAIL, {
-      email,
-      text: email
-    });
-    addIfPresent(columnValues, process.env.MONDAY_COL_FIRST_NAME, firstName);
-    addIfPresent(columnValues, process.env.MONDAY_COL_LAST_NAME, lastName);
-    addIfPresent(columnValues, process.env.MONDAY_COL_TITLE, title);
-    addIfPresent(columnValues, process.env.MONDAY_COL_COMPANY, company);
-    addIfPresent(columnValues, process.env.MONDAY_COL_WEBSITE, website);
-    addIfPresent(columnValues, process.env.MONDAY_COL_TEAM_NAME, teamName);
-    addIfPresent(columnValues, process.env.MONDAY_COL_START_DATE, startDate);
-    addIfPresent(columnValues, process.env.MONDAY_COL_END_DATE, endDate);
-    addIfPresent(columnValues, process.env.MONDAY_COL_PLAYERS_CURRENT, currentTeamSize);
-    addIfPresent(columnValues, process.env.MONDAY_COL_AVG_HEADCOUNT, avgHeadcount);
-    addIfPresent(columnValues, process.env.MONDAY_COL_TURNOVER, turnoverRate);
-    addIfPresent(columnValues, process.env.MONDAY_COL_RETENTION, retentionRate);
-    addIfPresent(columnValues, process.env.MONDAY_COL_ATTRACT_TOTAL, attractCost);
-    addIfPresent(columnValues, process.env.MONDAY_COL_ASSESS_TOTAL, assessCost);
-    addIfPresent(columnValues, process.env.MONDAY_COL_ADD_TOTAL, addCost);
-    addIfPresent(columnValues, process.env.MONDAY_COL_IMPACT_TOTAL, impactCost);
-    addIfPresent(columnValues, process.env.MONDAY_COL_GRAND_TOTAL, totalCost);
+    addIfPresent(columnValues, 'lead_email', email ? { email, text: email } : null);
+    addIfPresent(columnValues, 'lead_company', company);
+    addIfPresent(columnValues, 'text', title);
 
-    addIfPresent(columnValues, process.env.MONDAY_COL_RAW_JSON, JSON.stringify(payload));
+    addIfPresent(columnValues, 'text_mm26abnx', firstName);
+    addIfPresent(columnValues, 'text_mm26dvcp', lastName);
+    addIfPresent(columnValues, 'text_mm26qasb', companyWebsite);
+    addIfPresent(columnValues, 'text_mm266pdn', workgroupName);
+
+    addIfPresent(columnValues, 'numeric_mm26hnaq', currentTeamSize);
+    addIfPresent(columnValues, 'numeric_mm268na4', avgHeadcount);
+    addIfPresent(columnValues, 'numeric_mm264rze', turnoverRate);
+    addIfPresent(columnValues, 'numeric_mm26t93n', retentionRate);
+
+    addIfPresent(columnValues, 'numeric_mm2671wm', attractCost);
+    addIfPresent(columnValues, 'numeric_mm26aw7e', assessCost);
+    addIfPresent(columnValues, 'numeric_mm26x4ah', addCost);
+    addIfPresent(columnValues, 'numeric_mm262n6w', impactCost);
+    addIfPresent(columnValues, 'numeric_mm268267', totalCost);
+
+    // Monday date columns should be sent as objects
+    addIfPresent(columnValues, 'date_mm26pcfr', startDate ? { date: startDate } : null);
+    addIfPresent(columnValues, 'date_mm26bha6', endDate ? { date: endDate } : null);
 
     const query = `mutation {
       create_item(
@@ -122,6 +128,8 @@ export default async function handler(req, res) {
 
     if (!mondayRes.ok || data.errors) {
       console.error('Monday API full response:', JSON.stringify(data, null, 2));
+      console.error('Column values sent:', JSON.stringify(columnValues, null, 2));
+
       return res.status(500).json({
         success: false,
         error: data.errors?.[0]?.message || 'Monday API error',
@@ -135,6 +143,7 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Server error:', error);
+
     return res.status(500).json({
       success: false,
       error: error.message || 'Unexpected server error',
