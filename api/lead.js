@@ -11,6 +11,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    const data = req.body || {};
+
     const {
       firstName = "",
       lastName = "",
@@ -31,7 +33,7 @@ export default async function handler(req, res) {
       assessCost = "",
       addCost = "",
       impactCost = ""
-    } = req.body || {};
+    } = data;
 
     const itemName =
       [firstName, lastName].filter(Boolean).join(" ").trim() ||
@@ -45,25 +47,32 @@ export default async function handler(req, res) {
       lead_email: email ? { email, text: email } : null,
       lead_phone: phone ? { phone, countryShortName: "US" } : null,
       color_mkyb8krc: { labels: ["Calculator"] },
+
       text_mm26abnx: firstName,
       text_mm26dvcp: lastName,
-      numeric_mm26t93n: retentionRate === "" ? null : Number(retentionRate),
-      numeric_mm264rze: turnoverRate === "" ? null : Number(turnoverRate),
-      numeric_mm268na4: avgHeadcount === "" ? null : Number(avgHeadcount),
-      numeric_mm26hnaq: currentTeamSize === "" ? null : Number(currentTeamSize),
-      date_mm26bha6: endDate || null,
-      numeric_mm268267: totalCost === "" ? null : Number(totalCost),
-      numeric_mm2671wm: attractCost === "" ? null : Number(attractCost),
-      numeric_mm26aw7e: assessCost === "" ? null : Number(assessCost),
-      numeric_mm26x4ah: addCost === "" ? null : Number(addCost),
-      numeric_mm262n6w: impactCost === "" ? null : Number(impactCost),
-      date_mm26pcfr: startDate || null,
+      text_mm266pdn: workgroupName,
       text_mm26qasb: companyWebsite,
-      text_mm266pdn: workgroupName
+
+      numeric_mm26hnaq: currentTeamSize ? Number(currentTeamSize) : null,
+      numeric_mm268na4: avgHeadcount ? Number(avgHeadcount) : null,
+      numeric_mm264rze: turnoverRate ? Number(turnoverRate) : null,
+      numeric_mm26t93n: retentionRate ? Number(retentionRate) : null,
+
+      numeric_mm268267: totalCost ? Number(totalCost) : null,
+      numeric_mm2671wm: attractCost ? Number(attractCost) : null,
+      numeric_mm26aw7e: assessCost ? Number(assessCost) : null,
+      numeric_mm26x4ah: addCost ? Number(addCost) : null,
+      numeric_mm262n6w: impactCost ? Number(impactCost) : null,
+
+      date_mm26pcfr: startDate || null,
+      date_mm26bha6: endDate || null
     };
 
+    // remove null values
     Object.keys(columnValues).forEach((key) => {
-      if (columnValues[key] === null) delete columnValues[key];
+      if (columnValues[key] === null || columnValues[key] === "") {
+        delete columnValues[key];
+      }
     });
 
     const query = `
@@ -94,19 +103,20 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await response.json();
+    const result = await response.json();
 
-    if (!response.ok || data.errors) {
+    if (!response.ok || result.errors) {
       return res.status(500).json({
         message: "Monday API error",
-        details: data
+        details: result
       });
     }
 
     return res.status(200).json({
       success: true,
-      itemId: data.data.create_item.id
+      itemId: result.data.create_item.id
     });
+
   } catch (error) {
     return res.status(500).json({
       message: "Server error",
