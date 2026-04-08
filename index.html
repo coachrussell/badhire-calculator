@@ -2620,6 +2620,13 @@ function safeText(value){
   return String(value ?? '').trim();
 }
 
+function parseDisplayedNumber(value){
+  const cleaned = safeText(value).replace(/[^0-9.-]/g, '');
+  if (!cleaned) return '';
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : '';
+}
+
 function requiredLeadFieldsMissing(){
   const requiredIds = ['first_name','last_name','email','company_name','team_name'];
   return requiredIds.filter(id => !safeText(document.getElementById(id)?.value));
@@ -2628,61 +2635,28 @@ function requiredLeadFieldsMissing(){
 function collectLeadPayload(){
   const { attract, assess, add, impact } = sums();
   const grand = attract + assess + add + impact;
-  const payload = {
-    submitted_at: new Date().toISOString(),
-    meta: {
-      page_title: document.title,
-      source: window.location.href,
-      user_agent: navigator.userAgent
-    },
-    contact: {
-      first_name: safeText(document.getElementById('first_name')?.value),
-      last_name: safeText(document.getElementById('last_name')?.value),
-      email: safeText(document.getElementById('email')?.value),
-      title: safeText(document.getElementById('title')?.value),
-      company_name: safeText(document.getElementById('company_name')?.value),
-      company_website: safeText(document.getElementById('company_website')?.value),
-      team_name: safeText(document.getElementById('team_name')?.value)
-    },
-    report_parameters: {
-      start_date: safeText(document.getElementById('start_date')?.value),
-      end_date: safeText(document.getElementById('end_date')?.value),
-      players_start: safeText(document.getElementById('players_start')?.value),
-      players_hired: safeText(document.getElementById('players_hired')?.value),
-      players_left: safeText(document.getElementById('players_left')?.value),
-      players_current: safeText(document.getElementById('players_current')?.value),
-      avg_headcount: safeText(document.getElementById('avg_headcount')?.value),
-      turnover_rate: safeText(document.getElementById('turnover_rate')?.value),
-      retention_rate: safeText(document.getElementById('retention_rate')?.value)
-    },
-    calculator_inputs: {
-      attract_promote: safeText(document.getElementById('attract_promote')?.value),
-      attract_staff: safeText(document.getElementById('attract_staff')?.value),
-      attract_recruiters: safeText(document.getElementById('attract_recruiters')?.value),
-      attract_referrals: safeText(document.getElementById('attract_referrals')?.value),
-      assess_scout: safeText(document.getElementById('assess_scout')?.value),
-      assess_interviews: safeText(document.getElementById('assess_interviews')?.value),
-      assess_tests: safeText(document.getElementById('assess_tests')?.value),
-      assess_refs: safeText(document.getElementById('assess_refs')?.value),
-      add_offer: safeText(document.getElementById('add_offer')?.value),
-      add_verify: safeText(document.getElementById('add_verify')?.value),
-      add_prep: safeText(document.getElementById('add_prep')?.value),
-      add_first90: safeText(document.getElementById('add_first90')?.value),
-      impact_gain: safeText(document.getElementById('impact_gain')?.value),
-      impact_overhead: safeText(document.getElementById('impact_overhead')?.value),
-      impact_direct: safeText(document.getElementById('impact_direct')?.value),
-      impact_indirect: safeText(document.getElementById('impact_indirect')?.value)
-    },
-    totals: {
-      currency: safeText(document.getElementById('currency')?.value || 'USD'),
-      attract,
-      assess,
-      add,
-      impact,
-      grand_total: grand
-    }
+
+  return {
+    firstName: safeText(document.getElementById('first_name')?.value),
+    lastName: safeText(document.getElementById('last_name')?.value),
+    email: safeText(document.getElementById('email')?.value),
+    phone: '',
+    company: safeText(document.getElementById('company_name')?.value),
+    title: safeText(document.getElementById('title')?.value),
+    workgroupName: safeText(document.getElementById('team_name')?.value),
+    companyWebsite: safeText(document.getElementById('company_website')?.value),
+    startDate: safeText(document.getElementById('start_date')?.value),
+    endDate: safeText(document.getElementById('end_date')?.value),
+    currentTeamSize: parseDisplayedNumber(document.getElementById('players_current')?.value),
+    avgHeadcount: parseDisplayedNumber(document.getElementById('avg_headcount')?.value),
+    turnoverRate: parseDisplayedNumber(document.getElementById('turnover_rate')?.value),
+    retentionRate: parseDisplayedNumber(document.getElementById('retention_rate')?.value),
+    totalCost: grand,
+    attractCost: attract,
+    assessCost: assess,
+    addCost: add,
+    impactCost: impact
   };
-  return payload;
 }
 
 async function submitLeadToApi(){
@@ -2698,7 +2672,9 @@ async function submitLeadToApi(){
     return;
   }
 
+  const originalLabel = submitBtn.innerHTML;
   submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span>Sending...</span>';
   status.style.display = 'block';
   status.style.color = '#374151';
   status.textContent = 'Sending results...';
@@ -2712,17 +2688,19 @@ async function submitLeadToApi(){
     });
 
     const data = await res.json().catch(() => ({}));
-    if(!res.ok){
-      throw new Error(data.error || 'Failed to send results.');
+    if(!res.ok || !data.success){
+      throw new Error(data.message || data.error || 'Failed to send results.');
     }
 
     status.style.color = '#166534';
     status.textContent = 'Results sent successfully.';
   }catch(err){
+    console.error(err);
     status.style.color = '#b91c1c';
     status.textContent = err.message || 'Failed to send results.';
   }finally{
     submitBtn.disabled = false;
+    submitBtn.innerHTML = originalLabel;
   }
 }
 
