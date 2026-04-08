@@ -1,126 +1,252 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
+function escapeGraphQLString(value = '') {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '')
+    .replace(/"/g, '\\"');
+}
+
+function getEnv(name) {
+  return process.env[name];
+}
+
+function requireAnyEnv(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return value;
   }
+  throw new Error(`Missing required environment variable. Expected one of: ${names.join(', ')}`);
+}
 
-  const apiKey = process.env.MONDAY_API_KEY;
-  const boardId = 18406338529;
+function formatValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number') return String(value);
+  return String(value).trim();
+}
 
-  if (!apiKey) {
-    return res.status(500).json({ message: "Missing MONDAY_API_KEY" });
+function formatNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function addColumnIfPresent(obj, columnId, value) {
+  if (!columnId || columnId === 'undefined') return;
+  obj[columnId] = value;
+}
+
+function buildColumnValues(payload) {
+  const columnValues = {};
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_EMAIL'),
+    {
+      email: formatValue(payload.contact?.email),
+      text: formatValue(payload.contact?.email),
+    }
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_FIRST_NAME'),
+    formatValue(payload.contact?.first_name)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_LAST_NAME'),
+    formatValue(payload.contact?.last_name)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_TITLE'),
+    formatValue(payload.contact?.title)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_COMPANY'),
+    formatValue(payload.contact?.company_name)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_WEBSITE'),
+    formatValue(payload.contact?.company_website)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_TEAM_NAME'),
+    formatValue(payload.contact?.team_name)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_START_DATE'),
+    formatValue(payload.report_parameters?.start_date)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_END_DATE'),
+    formatValue(payload.report_parameters?.end_date)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_PLAYERS_START'),
+    formatNumber(payload.report_parameters?.players_start)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_PLAYERS_HIRED'),
+    formatNumber(payload.report_parameters?.players_hired)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_PLAYERS_LEFT'),
+    formatNumber(payload.report_parameters?.players_left)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_PLAYERS_CURRENT'),
+    formatNumber(payload.report_parameters?.players_current)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_AVG_HEADCOUNT'),
+    formatNumber(payload.report_parameters?.avg_headcount)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_TURNOVER'),
+    formatValue(payload.report_parameters?.turnover_rate)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_RETENTION'),
+    formatValue(payload.report_parameters?.retention_rate)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_CURRENCY'),
+    formatValue(payload.totals?.currency)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_ATTRACT_TOTAL'),
+    formatNumber(payload.totals?.attract)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_ASSESS_TOTAL'),
+    formatNumber(payload.totals?.assess)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_ADD_TOTAL'),
+    formatNumber(payload.totals?.add)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_IMPACT_TOTAL'),
+    formatNumber(payload.totals?.impact)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_GRAND_TOTAL'),
+    formatNumber(payload.totals?.grand_total)
+  );
+
+  addColumnIfPresent(
+    columnValues,
+    getEnv('MONDAY_COL_RAW_JSON'),
+    JSON.stringify(payload)
+  );
+
+  return columnValues;
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const data = req.body || {};
+    const apiToken = requireAnyEnv(['MONDAY_API_KEY', 'MONDAY_API_TOKEN']);
+    const boardIdRaw = requireAnyEnv(['MONDAY_BOARD_ID']);
+    const boardId = Number(boardIdRaw);
 
-    const {
-      firstName = "",
-      lastName = "",
-      email = "",
-      phone = "",
-      company = "",
-      title = "",
-      workgroupName = "",
-      companyWebsite = "",
-      startDate = "",
-      endDate = "",
-      currentTeamSize = "",
-      avgHeadcount = "",
-      turnoverRate = "",
-      retentionRate = "",
-      totalCost = "",
-      attractCost = "",
-      assessCost = "",
-      addCost = "",
-      impactCost = ""
-    } = data;
+    if (!Number.isFinite(boardId)) {
+      throw new Error('MONDAY_BOARD_ID must be a valid number');
+    }
+
+    const payload = req.body || {};
+
+    const firstName = formatValue(payload.contact?.first_name);
+    const lastName = formatValue(payload.contact?.last_name);
+    const company = formatValue(payload.contact?.company_name);
 
     const itemName =
-      [firstName, lastName].filter(Boolean).join(" ").trim() ||
+      `${firstName} ${lastName}`.trim() ||
       company ||
-      "Bad Hire Calculator Submission";
+      'Bad Hire Calculator Submission';
 
-    const columnValues = {
-      lead_status: { label: "New Lead" },
-      lead_company: company,
-      text: title,
-      lead_email: email ? { email, text: email } : null,
-      lead_phone: phone ? { phone, countryShortName: "US" } : null,
-      color_mkyb8krc: { labels: ["Calculator"] },
+    const columnValuesObject = buildColumnValues(payload);
+    const columnValuesJson = JSON.stringify(columnValuesObject);
 
-      text_mm26abnx: firstName,
-      text_mm26dvcp: lastName,
-      text_mm266pdn: workgroupName,
-      text_mm26qasb: companyWebsite,
-
-      numeric_mm26hnaq: currentTeamSize ? Number(currentTeamSize) : null,
-      numeric_mm268na4: avgHeadcount ? Number(avgHeadcount) : null,
-      numeric_mm264rze: turnoverRate ? Number(turnoverRate) : null,
-      numeric_mm26t93n: retentionRate ? Number(retentionRate) : null,
-
-      numeric_mm268267: totalCost ? Number(totalCost) : null,
-      numeric_mm2671wm: attractCost ? Number(attractCost) : null,
-      numeric_mm26aw7e: assessCost ? Number(assessCost) : null,
-      numeric_mm26x4ah: addCost ? Number(addCost) : null,
-      numeric_mm262n6w: impactCost ? Number(impactCost) : null,
-
-      date_mm26pcfr: startDate || null,
-      date_mm26bha6: endDate || null
-    };
-
-    // remove null values
-    Object.keys(columnValues).forEach((key) => {
-      if (columnValues[key] === null || columnValues[key] === "") {
-        delete columnValues[key];
+    const query = `mutation {
+      create_item(
+        board_id: ${boardId},
+        item_name: "${escapeGraphQLString(itemName)}",
+        column_values: "${escapeGraphQLString(columnValuesJson)}"
+      ) {
+        id
       }
-    });
+    }`;
 
-    const query = `
-      mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
-        create_item(
-          board_id: $boardId,
-          item_name: $itemName,
-          column_values: $columnValues
-        ) {
-          id
-        }
-      }
-    `;
-
-    const response = await fetch("https://api.monday.com/v2", {
-      method: "POST",
+    const mondayRes = await fetch('https://api.monday.com/v2', {
+      method: 'POST',
       headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json"
+        'Content-Type': 'application/json',
+        Authorization: apiToken,
       },
-      body: JSON.stringify({
-        query,
-        variables: {
-          boardId,
-          itemName,
-          columnValues: JSON.stringify(columnValues)
-        }
-      })
+      body: JSON.stringify({ query }),
     });
 
-    const result = await response.json();
+    const data = await mondayRes.json();
 
-    if (!response.ok || result.errors) {
+    if (!mondayRes.ok || data.errors) {
+      console.error('Monday API error:', JSON.stringify(data, null, 2));
       return res.status(500).json({
-        message: "Monday API error",
-        details: result
+        error: data.errors?.[0]?.message || 'Monday API error',
+        details: data.errors || data,
       });
     }
 
     return res.status(200).json({
-      success: true,
-      itemId: result.data.create_item.id
+      ok: true,
+      itemId: data.data?.create_item?.id || null,
     });
-
   } catch (error) {
+    console.error('Server error:', error);
     return res.status(500).json({
-      message: "Server error",
-      error: error.message
+      error: error.message || 'Unexpected server error',
     });
   }
 }
